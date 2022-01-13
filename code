@@ -1,0 +1,82 @@
+*&---------------------------------------------------------------------*
+*& Report Z112_UEB_KONDITIONEN
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT Z112_UEB_KONDITIONEN.
+
+TYPES: BEGIN OF t_position,
+        posnr TYPE i,
+        matnr(8) TYPE c,
+        menge TYPE i,
+        poswert TYPE p DECIMALS 2,
+       END OF t_position,
+
+       t_positionen_tab TYPE TABLE OF t_position,
+
+       BEGIN OF t_kondition,
+         matnr(8) TYPE c,
+         posrf TYPE i,
+         kondart(4) TYPE c,
+         typ TYPE c,
+         hoehe TYPE i,
+       END OF t_kondition,
+
+       t_konditionen_tab TYPE SORTED TABLE OF t_kondition WITH NON-UNIQUE KEY matnr posrf.
+
+DATA: gt_positionen TYPE t_positionen_tab,
+      gs_position TYPE t_position,
+      gt_konditionen TYPE t_konditionen_tab,
+      gs_kondition TYPE t_kondition,
+      gn_auftragswert TYPE p DECIMALS 2,
+      gv_fehler TYPE abap_bool.
+
+gt_positionen = VALUE #(
+  ( posnr = 10   matnr = 'DXTR1069'   menge = 2  )
+  ( posnr = 20   matnr = 'PRTR1069'   menge = 3  )
+  ( posnr = 30   matnr = 'PRTR3069'   menge = 1  )
+).
+
+gt_konditionen = VALUE #(
+  ( matnr = 'DXTR1069'  posrf = 1  kondart = 'PR00'  typ = 'B' hoehe = 3000 )
+  ( matnr = 'PRTR1069'  posrf = 1  kondart = 'PR00'  typ = 'B' hoehe = 3200 )
+  ( matnr = 'DXTR1069'  posrf = 4  kondart = 'RA00'  typ = 'P' hoehe = -3 )
+  ( matnr = 'DXTR1069'  posrf = 2  kondart = 'KA00'  typ = 'P' hoehe = -10 )
+  ( matnr = 'DXTR1069'  posrf = 3  kondart = 'K004'  typ = 'B' hoehe = -200 )
+  ( matnr = 'PRTR3069'  posrf = 2  kondart = 'K004'  typ = 'B' hoehe = -100 )
+  ( matnr = 'PRTR1069'  posrf = 2  kondart = 'KA00'  typ = 'P' hoehe = -5 )
+  ( matnr = 'PRTR3069'  posrf = 1  kondart = 'PR00'  typ = 'B' hoehe = 3200 )
+).
+
+LOOP AT gt_positionen INTO gs_position.
+  READ TABLE gt_konditionen INTO gs_kondition WITH KEY matnr = gs_position-matnr.
+  IF gs_kondition-kondart <> 'PR00'.
+    gv_fehler = abap_true.
+    WRITE: / 'Obligatorische Kondition PR00 fehlt für Material', gs_position-matnr.
+  ENDIF.
+ENDLOOP.
+
+IF gv_fehler = abap_false.
+  WRITE: / 'Pos', 15 'Material', 30 'Menge', 45 'Poswert'.
+  LOOP AT gt_positionen INTO gs_position.
+
+    READ TABLE gt_konditionen INTO gs_kondition WITH KEY matnr = gs_position-matnr kondart = 'PR00'.
+    gs_position-poswert = gs_kondition-hoehe * gs_position-menge.
+
+    LOOP AT gt_konditionen INTO gs_kondition WHERE kondart <> 'PR00' AND matnr = gs_position-matnr.
+      IF gs_kondition-typ = 'B'.
+        gs_position-poswert = gs_position-poswert + gs_kondition-hoehe * gs_position-menge.
+      ELSEIF gs_kondition-typ = 'P'.
+        gs_position-poswert = gs_position-poswert + gs_position-poswert / 100 * gs_kondition-hoehe.
+      ENDIF.
+    ENDLOOP.
+
+    gn_auftragswert = gn_auftragswert + gs_position-poswert.
+
+    MODIFY gt_positionen FROM gs_position.
+
+    WRITE: /(*) gs_position-posnr, 15(*) gs_position-matnr, 30(*) gs_position-menge, 45(*) gs_position-poswert.
+  ENDLOOP.
+
+  WRITE: / 'Auftragsnettowert', gn_auftragswert.
+ENDIF.
